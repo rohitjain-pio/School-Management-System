@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Environment variables (API keys, tokens)
+.env
+.env.local
+.env.*.local
+config.json
+*-config.json
+
+# MCP server data
+data/
+storage/
+*.db
+*.sqlite
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db

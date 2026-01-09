@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SignalR Chat Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .status.disconnected { background: #ffebee; color: #c62828; }
+        .status.connected { background: #e8f5e9; color: #2e7d32; }
+        .controls {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f5f5f5;
+            border-radius: 4px;
+        }
+        input, button {
+            padding: 8px 12px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover { background: #45a049; }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        #messages {
+            border: 1px solid #ddd;
+            padding: 15px;
+            min-height: 300px;
+            max-height: 400px;
+            overflow-y: auto;
+            background: #fafafa;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+        .message {
+            padding: 8px;
+            margin: 5px 0;
+            border-radius: 4px;
+            background: white;
+            border-left: 3px solid #4CAF50;
+        }
+        .message.system {
+            background: #fff3cd;
+            border-left-color: #ffc107;
+            font-style: italic;
+        }
+        .message .sender {
+            font-weight: bold;
+            color: #1976d2;
+        }
+        .message .time {
+            font-size: 0.8em;
+            color: #666;
+            float: right;
+        }
+        .online-users {
+            background: #e3f2fd;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 SignalR Chat Test</h1>
+        
+        <div id="status" class="status disconnected">
+            ❌ Disconnected
+        </div>
+
+        <div class="controls">
+            <div>
+                <label>Username:</label>
+                <input type="text" id="username" value="TestUser" placeholder="Enter username">
+            </div>
+            <div>
+                <label>Room ID:</label>
+                <input type="text" id="roomId" value="test-room-123" placeholder="Enter room ID">
+            </div>
+            <div>
+                <button id="connectBtn" onclick="connect()">Connect</button>
+                <button id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+            </div>
+        </div>
+
+        <div class="online-users">
+            <strong>Online Users:</strong> <span id="onlineUsers">None</span>
+        </div>
+
+        <div class="controls">
+            <input type="text" id="messageInput" placeholder="Type a message..." style="width: 60%;" disabled>
+            <button id="sendBtn" onclick="sendMessage()" disabled>Send Message</button>
+        </div>
+
+        <div id="messages"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/9.0.0/signalr.min.js"></script>
+    <script>
+        let connection = null;
+        const apiUrl = "http://localhost:7266";
+
+        function addMessage(sender, content, timestamp, isSystem = false) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message' + (isSystem ? ' system' : '');
+            
+            const time = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+            
+            messageDiv.innerHTML = `
+                <span class="time">${time}</span>
+                <span class="sender">${sender}:</span> ${content}
+            `;
+            
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function updateStatus(connected) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = 'status ' + (connected ? 'connected' : 'disconnected');
+            statusDiv.textContent = connected ? '✅ Connected' : '❌ Disconnected';
+            
+            document.getElementById('connectBtn').disabled = connected;
+            document.getElementById('disconnectBtn').disabled = !connected;
+            document.getElementById('messageInput').disabled = !connected;
+            document.getElementById('sendBtn').disabled = !connected;
+        }
+
+        async function connect() {
+            const username = document.getElementById('username').value;
+            const roomId = document.getElementById('roomId').value;
+
+            if (!username || !roomId) {
+                alert('Please enter username and room ID');
+                return;
+            }
+
+            try {
+                connection = new signalR.HubConnectionBuilder()
+                    .withUrl(`${apiUrl}/chatHub`, {
+                        withCredentials: true
+                    })
+                    .configureLogging(signalR.LogLevel.Information)
+                    .withAutomaticReconnect()
+                    .build();
+
+                // Set up event handlers
+                connection.on("ReceiveMessage", (message) => {
+                    addMessage(message.sender, message.content, message.timestamp);
+                });
+
+                connection.on("ReceiveTyping", (user) => {
+                    addMessage('System', `${user} is typing...`, null, true);
+                });
+
+                connection.on("UserListUpdated", (users) => {
+                    document.getElementById('onlineUsers').textContent = users.join(', ') || 'None';
+                });
+
+                connection.on("UserJoined", (user) => {
+                    addMessage('System', `${user} joined the room`, null, true);
+                });
+
+                connection.on("UserLeft", (user) => {
+                    addMessage('System', `${user} left the room`, null, true);
+                });
+
+                // Start connection
+                await connection.start();
+                console.log('Connected to SignalR');
+                
+                // Join room
+                await connection.invoke("JoinRoom", roomId, username);
+                console.log(`Joined room: ${roomId}`);
+                
+                updateStatus(true);
+                addMessage('System', `You joined room: ${roomId}`, null, true);
+
+            } catch (err) {
+                console.error('Connection error:', err);
+                alert('Failed to connect: ' + err.message);
+                updateStatus(false);
+            }
+        }
+
+        async function disconnect() {
+            if (connection) {
+                const roomId = document.getElementById('roomId').value;
+                try {
+                    await connection.invoke("LeaveRoom", roomId);
+                    await connection.stop();
+                } catch (err) {
+                    console.error('Disconnect error:', err);
+                }
+                updateStatus(false);
+                addMessage('System', 'You disconnected', null, true);
+            }
+        }
+
+        async function sendMessage() {
+            const messageInput = document.getElementById('messageInput');
+            const message = messageInput.value.trim();
+            
+            if (!message || !connection) return;
+
+            const username = document.getElementById('username').value;
+            const roomId = document.getElementById('roomId').value;
+
+            try {
+                await connection.invoke("SendMessage", roomId, username, message);
+                messageInput.value = '';
+            } catch (err) {
+                console.error('Send error:', err);
+                alert('Failed to send message');
+            }
+        }
+
+        // Allow Enter key to send message
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('messageInput').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    sendMessage();
+                }
+            });
+        });
+    </script>
+</body>
+</html>

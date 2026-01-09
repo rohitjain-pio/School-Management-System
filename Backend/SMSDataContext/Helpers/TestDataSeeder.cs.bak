@@ -1,0 +1,456 @@
+using Microsoft.EntityFrameworkCore;
+using SMSDataContext.Data;
+using SMSDataModel.Model.Models;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+
+namespace SMSDataContext.Helpers
+{
+    /// <summary>
+    /// Seeds test data for automated testing
+    /// Creates known test users, schools, classes, etc. with predictable credentials
+    /// </summary>
+    public class TestDataSeeder
+    {
+        private readonly DataContext _context;
+
+        public TestDataSeeder(DataContext context)
+        {
+            _context = context;
+        }
+
+        /// <summary>
+        /// Seeds all test data
+        /// </summary>
+        public async Task SeedAllAsync()
+        {
+            // Clear existing test data
+            await ClearTestDataAsync();
+
+            // Seed in order of dependencies
+            await SeedTestUsersAsync();
+            await SeedTestSchoolsAsync();
+            await SeedTestClassesAsync();
+            await SeedTestStudentsAsync();
+            await SeedTestTeachersAsync();
+            await SeedTestAnnouncementsAsync();
+            await SeedTestChatRoomsAsync();
+
+            await _context.SaveChangesAsync();
+        }
+
+        /// <summary>
+        /// Clears all test data (entities with "test" in name/email)
+        /// </summary>
+        public async Task ClearTestDataAsync()
+        {
+            // Remove test students
+            var testStudents = await _context.Students
+                .Where(s => s.Email.Contains("@test.sms.edu"))
+                .ToListAsync();
+            _context.Students.RemoveRange(testStudents);
+
+            // Remove test teachers
+            var testTeachers = await _context.Teachers
+                .Where(t => t.Email.Contains("@test.sms.edu"))
+                .ToListAsync();
+            _context.Teachers.RemoveRange(testTeachers);
+
+            // Remove test schools
+            var testSchools = await _context.Schools
+                .Where(s => s.Name.Contains("Test"))
+                .ToListAsync();
+            _context.Schools.RemoveRange(testSchools);
+
+            await _context.SaveChangesAsync();
+        }
+
+        /// <summary>
+        /// Seeds test users with known credentials
+        /// </summary>
+        private async Task SeedTestUsersAsync()
+        {
+            var testUsers = new List<User>
+            {
+                new User
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000001"),
+                    UserName = "admin_test",
+                    Email = "admin@test.sms.edu",
+                    PasswordHash = HashPassword("Admin123!"),
+                    Role = "Admin",
+                    CreatedAt = DateTime.UtcNow
+                },
+                new User
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000002"),
+                    UserName = "teacher_test",
+                    Email = "teacher@test.sms.edu",
+                    PasswordHash = HashPassword("Teacher123!"),
+                    Role = "Teacher",
+                    CreatedAt = DateTime.UtcNow
+                },
+                new User
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000003"),
+                    UserName = "student_test",
+                    Email = "student@test.sms.edu",
+                    PasswordHash = HashPassword("Student123!"),
+                    Role = "Student",
+                    CreatedAt = DateTime.UtcNow
+                },
+                new User
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000004"),
+                    UserName = "principal_test",
+                    Email = "principal@test.sms.edu",
+                    PasswordHash = HashPassword("Principal123!"),
+                    Role = "Principal",
+                    CreatedAt = DateTime.UtcNow
+                },
+                new User
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000005"),
+                    UserName = "superadmin_test",
+                    Email = "superadmin@test.sms.edu",
+                    PasswordHash = HashPassword("SuperAdmin123!"),
+                    Role = "SuperAdmin",
+                    CreatedAt = DateTime.UtcNow
+                }
+            };
+
+            // Only add if not exists
+            foreach (var user in testUsers)
+            {
+                if (!await _context.Users.AnyAsync(u => u.Email == user.Email))
+                {
+                    _context.Users.Add(user);
+                }
+            }
+
+            await _context.SaveChangesAsync();
+        }
+
+        /// <summary>
+        /// Seeds test schools
+        /// </summary>
+        private async Task SeedTestSchoolsAsync()
+        {
+            var testSchools = new List<School>
+            {
+                new School
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000011"),
+                    Name = "Test High School",
+                    Address = "123 Test Street",
+                    PhoneNumber = "555-0001",
+                    Email = "admin@testhighschool.edu",
+                    EstablishedDate = new DateTime(2000, 1, 1)
+                },
+                new School
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000012"),
+                    Name = "Test Elementary School",
+                    Address = "456 Test Avenue",
+                    PhoneNumber = "555-0002",
+                    Email = "admin@testelementary.edu",
+                    EstablishedDate = new DateTime(2005, 1, 1)
+                }
+            };
+
+            foreach (var school in testSchools)
+            {
+                if (!await _context.Schools.AnyAsync(s => s.Id == school.Id))
+                {
+                    _context.Schools.Add(school);
+                }
+            }
+
+            await _context.SaveChangesAsync();
+        }
+
+        /// <summary>
+        /// Seeds test classes
+        /// </summary>
+        private async Task SeedTestClassesAsync()
+        {
+            var testClasses = new List<Class>
+            {
+                new Class
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000021"),
+                    ClassName = "Test Math 101",
+                    Section = "A",
+                    SchoolId = Guid.Parse("00000000-0000-0000-0000-000000000011"),
+                    Capacity = 30,
+                    CreatedAt = DateTime.UtcNow
+                },
+                new Class
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000022"),
+                    ClassName = "Test Science 101",
+                    Section = "B",
+                    SchoolId = Guid.Parse("00000000-0000-0000-0000-000000000011"),
+                    Capacity = 25,
+                    CreatedAt = DateTime.UtcNow
+                },
+                new Class
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000023"),
+                    ClassName = "Test English 101",
+                    Section = "A",
+                    SchoolId = Guid.Parse("00000000-0000-0000-0000-000000000012"),
+                    Capacity = 20,
+                    CreatedAt = DateTime.UtcNow
+                }
+            };
+
+            foreach (var testClass in testClasses)
+            {
+                if (!await _context.Classes.AnyAsync(c => c.Id == testClass.Id))
+                {
+                    _context.Classes.Add(testClass);
+                }
+            }
+
+            await _context.SaveChangesAsync();
+        }
+
+        /// <summary>
+        /// Seeds test students
+        /// </summary>
+        private async Task SeedTestStudentsAsync()
+        {
+            var testStudents = new List<Student>
+            {
+                new Student
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000031"),
+                    UserId = Guid.Parse("00000000-0000-0000-0000-000000000003"),
+                    FirstName = "John",
+                    LastName = "Doe",
+                    Email = "john.doe@test.sms.edu",
+                    DateOfBirth = new DateTime(2010, 5, 15),
+                    Gender = "Male",
+                    PhoneNumber = "555-1001",
+                    Address = "123 Student Lane",
+                    ClassId = Guid.Parse("00000000-0000-0000-0000-000000000021"),
+                    SchoolId = Guid.Parse("00000000-0000-0000-0000-000000000011"),
+                    GuardianName = "Jane Doe",
+                    GuardianPhone = "555-1002"
+                },
+                new Student
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000032"),
+                    FirstName = "Alice",
+                    LastName = "Smith",
+                    Email = "alice.smith@test.sms.edu",
+                    DateOfBirth = new DateTime(2011, 8, 20),
+                    Gender = "Female",
+                    PhoneNumber = "555-1003",
+                    Address = "456 Student Drive",
+                    ClassId = Guid.Parse("00000000-0000-0000-0000-000000000021"),
+                    SchoolId = Guid.Parse("00000000-0000-0000-0000-000000000011"),
+                    GuardianName = "Bob Smith",
+                    GuardianPhone = "555-1004"
+                },
+                new Student
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000033"),
+                    FirstName = "Bob",
+                    LastName = "Johnson",
+                    Email = "bob.johnson@test.sms.edu",
+                    DateOfBirth = new DateTime(2012, 3, 10),
+                    Gender = "Male",
+                    PhoneNumber = "555-1005",
+                    Address = "789 Student Boulevard",
+                    ClassId = Guid.Parse("00000000-0000-0000-0000-000000000022"),
+                    SchoolId = Guid.Parse("00000000-0000-0000-0000-000000000011"),
+                    GuardianName = "Mary Johnson",
+                    GuardianPhone = "555-1006"
+                }
+            };
+
+            foreach (var student in testStudents)
+            {
+                if (!await _context.Students.AnyAsync(s => s.Id == student.Id))
+                {
+                    _context.Students.Add(student);
+                }
+            }
+
+            await _context.SaveChangesAsync();
+        }
+
+        /// <summary>
+        /// Seeds test teachers
+        /// </summary>
+        private async Task SeedTestTeachersAsync()
+        {
+            var testTeachers = new List<Teacher>
+            {
+                new Teacher
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000041"),
+                    UserId = Guid.Parse("00000000-0000-0000-0000-000000000002"),
+                    FirstName = "Sarah",
+                    LastName = "Williams",
+                    Email = "sarah.williams@test.sms.edu",
+                    PhoneNumber = "555-2001",
+                    Subject = "Mathematics",
+                    SchoolId = Guid.Parse("00000000-0000-0000-0000-000000000011"),
+                    HireDate = new DateTime(2020, 9, 1)
+                },
+                new Teacher
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000042"),
+                    FirstName = "Michael",
+                    LastName = "Brown",
+                    Email = "michael.brown@test.sms.edu",
+                    PhoneNumber = "555-2002",
+                    Subject = "Science",
+                    SchoolId = Guid.Parse("00000000-0000-0000-0000-000000000011"),
+                    HireDate = new DateTime(2019, 9, 1)
+                }
+            };
+
+            foreach (var teacher in testTeachers)
+            {
+                if (!await _context.Teachers.AnyAsync(t => t.Id == teacher.Id))
+                {
+                    _context.Teachers.Add(teacher);
+                }
+            }
+
+            await _context.SaveChangesAsync();
+        }
+
+        /// <summary>
+        /// Seeds test announcements
+        /// </summary>
+        private async Task SeedTestAnnouncementsAsync()
+        {
+            var testAnnouncements = new List<Announcement>
+            {
+                new Announcement
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000051"),
+                    Title = "Test Announcement 1",
+                    Content = "This is a test announcement for automated testing.",
+                    SchoolId = Guid.Parse("00000000-0000-0000-0000-000000000011"),
+                    CreatedAt = DateTime.UtcNow,
+                    Priority = "Normal"
+                }
+            };
+
+            foreach (var announcement in testAnnouncements)
+            {
+                if (!await _context.Announcements.AnyAsync(a => a.Id == announcement.Id))
+                {
+                    _context.Announcements.Add(announcement);
+                }
+            }
+
+            await _context.SaveChangesAsync();
+        }
+
+        /// <summary>
+        /// Seeds test chat rooms
+        /// </summary>
+        private async Task SeedTestChatRoomsAsync()
+        {
+            var testRooms = new List<ChatRoom>
+            {
+                new ChatRoom
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000061"),
+                    Name = "Test Math Discussion",
+                    Description = "Test chat room for Math class",
+                    PrivacyLevel = "Public",
+                    ClassId = Guid.Parse("00000000-0000-0000-0000-000000000021"),
+                    SchoolId = Guid.Parse("00000000-0000-0000-0000-000000000011"),
+                    CreatedBy = Guid.Parse("00000000-0000-0000-0000-000000000002"),
+                    CreatedAt = DateTime.UtcNow
+                },
+                new ChatRoom
+                {
+                    Id = Guid.Parse("00000000-0000-0000-0000-000000000062"),
+                    Name = "Test Private Room",
+                    Description = "Private test chat room with password",
+                    PrivacyLevel = "Private",
+                    Password = HashPassword("TestRoom123"),
+                    SchoolId = Guid.Parse("00000000-0000-0000-0000-000000000011"),
+                    CreatedBy = Guid.Parse("00000000-0000-0000-0000-000000000001"),
+                    CreatedAt = DateTime.UtcNow
+                }
+            };
+
+            foreach (var room in testRooms)
+            {
+                if (!await _context.ChatRooms.AnyAsync(r => r.Id == room.Id))
+                {
+                    _context.ChatRooms.Add(room);
+                }
+            }
+
+            await _context.SaveChangesAsync();
+        }
+
+        /// <summary>
+        /// Simple password hashing (replace with actual implementation)
+        /// </summary>
+        private string HashPassword(string password)
+        {
+            // TODO: Use actual password hashing from authentication service
+            // This is a placeholder for testing
+            return BCrypt.Net.BCrypt.HashPassword(password);
+        }
+
+        /// <summary>
+        /// Gets a known test user by role
+        /// </summary>
+        public async Task<ApplicationUser> GetTestUserByRoleAsync(string role)
+        {
+            return await _context.Users
+                .FirstOrDefaultAsync(u => u.Email.Contains("@test.sms.edu"));
+        }
+
+        /// <summary>
+        /// Gets a known test student
+        /// </summary>
+        public async Task<Student> GetTestStudentAsync()
+        {
+            return await _context.Students
+                .FirstOrDefaultAsync(s => s.Id == Guid.Parse("00000000-0000-0000-0000-000000000031"));
+        }
+
+        /// <summary>
+        /// Gets a known test teacher
+        /// </summary>
+        public async Task<Teacher> GetTestTeacherAsync()
+        {
+            return await _context.Teachers
+                .FirstOrDefaultAsync(t => t.Id == Guid.Parse("00000000-0000-0000-0000-000000000041"));
+        }
+
+        /// <summary>
+        /// Gets a known test school
+        /// </summary>
+        public async Task<School> GetTestSchoolAsync()
+        {
+            return await _context.Schools
+                .FirstOrDefaultAsync(s => s.Id == Guid.Parse("00000000-0000-0000-0000-000000000011"));
+        }
+
+        /// <summary>
+        /// Gets a known test class
+        /// </summary>
+        public async Task<SchoolClass> GetTestClassAsync()
+        {
+            return await _context.Classes
+                .FirstOrDefaultAsync(c => c.Id == Guid.Parse("00000000-0000-0000-0000-000000000021"));
+        }
+    }
+}

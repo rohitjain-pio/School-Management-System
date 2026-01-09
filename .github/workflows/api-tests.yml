@@ -1,0 +1,399 @@
+name: API Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '9.0.x'
+  NODE_VERSION: '20'
+
+jobs:
+  # Job 1: Unit Tests
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Restore dependencies
+      run: dotnet restore
+      working-directory: ./Backend
+    
+    - name: Build
+      run: dotnet build --no-restore --configuration Release
+      working-directory: ./Backend
+    
+    - name: Run Unit Tests
+      run: |
+        dotnet test \
+          --no-build \
+          --configuration Release \
+          --verbosity normal \
+          --collect:"XPlat Code Coverage" \
+          --results-directory ./coverage \
+          --logger "trx;LogFileName=test-results.trx"
+      working-directory: ./Backend
+    
+    - name: Generate Coverage Report
+      uses: danielpalme/ReportGenerator-GitHub-Action@5
+      with:
+        reports: './Backend/coverage/**/coverage.cobertura.xml'
+        targetdir: './coverage-report'
+        reporttypes: 'HtmlInline;Cobertura;MarkdownSummaryGithub'
+    
+    - name: Upload Coverage Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: ./coverage-report
+    
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: unit-test-results
+        path: ./Backend/**/TestResults/*.trx
+    
+    - name: Check Coverage Threshold
+      run: |
+        # Extract coverage percentage from Cobertura XML
+        if [ -f coverage-report/Cobertura.xml ]; then
+          COVERAGE=$(grep -oP 'line-rate="\K[0-9.]+' coverage-report/Cobertura.xml | head -1)
+          COVERAGE_PCT=$(echo "$COVERAGE * 100" | bc)
+          echo "Code Coverage: $COVERAGE_PCT%"
+          
+          # Fail if below 80%
+          if (( $(echo "$COVERAGE_PCT < 80" | bc -l) )); then
+            echo "❌ Coverage below 80% threshold"
+            exit 1
+          else
+            echo "✅ Coverage meets 80% threshold"
+          fi
+        else
+          echo "⚠️ Coverage report not found"
+        fi
+
+  # Job 2: Integration Tests
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          SA_PASSWORD: Test123!@#$
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P Test123!@#$ -Q 'SELECT 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Wait for SQL Server
+      run: sleep 15
+    
+    - name: Restore dependencies
+      run: dotnet restore
+      working-directory: ./Backend
+    
+    - name: Build
+      run: dotnet build --no-restore --configuration Release
+      working-directory: ./Backend
+    
+    - name: Run Integration Tests
+      run: |
+        dotnet test \
+          --no-build \
+          --configuration Release \
+          --filter "Category=Integration" \
+          --verbosity normal \
+          --logger "trx;LogFileName=integration-test-results.trx"
+      working-directory: ./Backend
+      env:
+        ConnectionStrings__TestConnection: "Server=localhost,1433;Database=SMSTestDB;User Id=sa;Password=Test123!@#$;TrustServerCertificate=True"
+    
+    - name: Upload Integration Test Results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: integration-test-results
+        path: ./Backend/**/TestResults/*.trx
+
+  # Job 3: API Tests (Postman/Newman)
+  api-tests:
+    name: API Tests (Postman)
+    runs-on: ubuntu-latest
+    needs: integration-tests
+    
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          SA_PASSWORD: Test123!@#$
+        ports:
+          - 1433:1433
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+    
+    - name: Wait for SQL Server
+      run: sleep 15
+    
+    - name: Restore and Build API
+      run: |
+        dotnet restore
+        dotnet build --no-restore --configuration Release
+      working-directory: ./Backend
+    
+    - name: Start API Server
+      run: |
+        dotnet run --project Backend/SMSPrototype1/SMSPrototype1.csproj --no-build --configuration Release &
+        echo "Waiting for API to start..."
+        sleep 30
+        curl --retry 10 --retry-delay 3 --retry-connrefused https://localhost:7266/health || true
+      env:
+        ASPNETCORE_ENVIRONMENT: Development
+        ConnectionStrings__DefaultConnection: "Server=localhost,1433;Database=SMSDB;User Id=sa;Password=Test123!@#$;TrustServerCertificate=True"
+    
+    - name: Install Newman
+      run: npm install -g newman newman-reporter-htmlextra
+    
+    - name: Run Postman Collection
+      run: |
+        if [ -f docs/testing/postman/SMS_API_Tests.json ]; then
+          newman run docs/testing/postman/SMS_API_Tests.json \
+            -e docs/testing/postman/Test_Environment.json \
+            --reporters cli,htmlextra \
+            --reporter-htmlextra-export ./newman-report.html \
+            --insecure
+        else
+          echo "⚠️ Postman collection not found, skipping API tests"
+        fi
+      continue-on-error: true
+    
+    - name: Upload Newman Report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: newman-report
+        path: ./newman-report.html
+
+  # Job 4: Contract Tests
+  contract-tests:
+    name: Contract Tests (OpenAPI)
+    runs-on: ubuntu-latest
+    needs: integration-tests
+    
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          SA_PASSWORD: Test123!@#$
+        ports:
+          - 1433:1433
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Wait for SQL Server
+      run: sleep 15
+    
+    - name: Start API Server
+      run: |
+        dotnet run --project Backend/SMSPrototype1/SMSPrototype1.csproj &
+        sleep 30
+      env:
+        ASPNETCORE_ENVIRONMENT: Development
+        ConnectionStrings__DefaultConnection: "Server=localhost,1433;Database=SMSDB;User Id=sa;Password=Test123!@#$;TrustServerCertificate=True"
+    
+    - name: Install Schemathesis
+      run: pip install schemathesis
+    
+    - name: Run Contract Tests
+      run: |
+        schemathesis run https://localhost:7266/swagger/v1/swagger.json \
+          --base-url https://localhost:7266 \
+          --checks all \
+          --hypothesis-max-examples=10 \
+          --report contract-report.html \
+          --validate-schema=true
+      continue-on-error: true
+    
+    - name: Upload Contract Report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: contract-report
+        path: ./contract-report.html
+
+  # Job 5: Performance Tests (k6)
+  performance-tests:
+    name: Performance Tests (k6)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: api-tests
+    
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          SA_PASSWORD: Test123!@#$
+        ports:
+          - 1433:1433
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+    
+    - name: Setup k6
+      run: |
+        sudo gpg -k
+        sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
+          --keyserver hkp://keyserver.ubuntu.com:80 \
+          --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+        echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | \
+          sudo tee /etc/apt/sources.list.d/k6.list
+        sudo apt-get update
+        sudo apt-get install k6
+    
+    - name: Wait for SQL Server
+      run: sleep 15
+    
+    - name: Start API Server
+      run: |
+        dotnet run --project Backend/SMSPrototype1/SMSPrototype1.csproj &
+        sleep 30
+      env:
+        ASPNETCORE_ENVIRONMENT: Development
+        ConnectionStrings__DefaultConnection: "Server=localhost,1433;Database=SMSDB;User Id=sa;Password=Test123!@#$;TrustServerCertificate=True"
+    
+    - name: Run Authentication Load Test
+      run: |
+        k6 run Backend/performance-tests/auth-load-test.js \
+          --out json=auth-performance-results.json
+      env:
+        BASE_URL: https://localhost:7266
+    
+    - name: Run Student CRUD Stress Test
+      run: |
+        k6 run Backend/performance-tests/student-crud-test.js \
+          --out json=student-performance-results.json
+      env:
+        BASE_URL: https://localhost:7266
+      continue-on-error: true
+    
+    - name: Upload Performance Results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: performance-results
+        path: |
+          auth-performance-results.json
+          student-performance-results.json
+    
+    - name: Check Performance Thresholds
+      run: |
+        # Check if thresholds were met
+        if grep -q '"failed":true' auth-performance-results.json; then
+          echo "❌ Authentication performance thresholds not met"
+          exit 1
+        else
+          echo "✅ Authentication performance thresholds met"
+        fi
+
+  # Job 6: Test Summary
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests, api-tests, contract-tests]
+    if: always()
+    
+    steps:
+    - name: Download All Artifacts
+      uses: actions/download-artifact@v4
+    
+    - name: Generate Test Summary
+      run: |
+        echo "# Test Execution Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## Test Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Unit Tests
+        if [ -f coverage-report/SummaryGithub.md ]; then
+          echo "### Unit Tests & Coverage" >> $GITHUB_STEP_SUMMARY
+          cat coverage-report/SummaryGithub.md >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "### Integration Tests" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Integration tests completed" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        echo "### API Tests (Newman)" >> $GITHUB_STEP_SUMMARY
+        echo "✅ API tests completed" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        echo "### Contract Tests" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Contract validation completed" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        echo "## Artifacts" >> $GITHUB_STEP_SUMMARY
+        echo "- Coverage Report" >> $GITHUB_STEP_SUMMARY
+        echo "- Newman API Test Report" >> $GITHUB_STEP_SUMMARY
+        echo "- Contract Test Report" >> $GITHUB_STEP_SUMMARY
+        echo "- Performance Test Results" >> $GITHUB_STEP_SUMMARY

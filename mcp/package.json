@@ -1,0 +1,28 @@
+{
+  "name": "sms-mcp-servers",
+  "version": "1.0.0",
+  "description": "Privacy-focused local MCP servers for School Management System",
+  "type": "module",
+  "scripts": {
+    "install-servers": "npm install"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server-filesystem": "latest",
+    "@modelcontextprotocol/server-git": "latest",
+    "@modelcontextprotocol/server-memory": "latest",
+    "@modelcontextprotocol/server-sequential-thinking": "latest"
+  },
+  "optionalDependencies": {
+    "@modelcontextprotocol/server-github": "latest",
+    "@modelcontextprotocol/server-fetch": "latest",
+    "@modelcontextprotocol/server-brave-search": "latest"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "school-management",
+    "local-only"
+  ],
+  "author": "",
+  "license": "MIT"
+}
