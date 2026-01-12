@@ -1,16 +1,28 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { PagedResult, PaginationParams } from "@/types/pagination";
+import { fetchWithCorrelation } from "@/lib/correlationId";
 
 const server_url = import.meta.env.VITE_API_URL;
 
-// Fetch all teachers
-const fetchTeachers = async () => {
-  const res = await fetch(`${server_url}/api/Teacher`, {
+// Fetch all teachers (paginated)
+const fetchTeachers = async (params?: PaginationParams) => {
+  const queryParams = new URLSearchParams();
+  if (params?.pageNumber) queryParams.append('pageNumber', params.pageNumber.toString());
+  if (params?.pageSize) queryParams.append('pageSize', params.pageSize.toString());
+  
+  const url = `${server_url}/api/Teacher${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+  const res = await fetchWithCorrelation(url, {
     credentials: "include", // 👈 Include auth cookies
   });
   if (!res.ok) throw new Error(res.statusText);
   const json = await res.json();
   if (!json.isSuccess) throw new Error(json.errorMessage);
   console.log(json.content);
+  
+  // Handle both paginated and non-paginated responses for backward compatibility
+  if (json.content?.items) {
+    return json.content as PagedResult<any>;
+  }
   return json.content ?? [];
 };
 
@@ -20,7 +32,7 @@ const createTeacher = async ({ newTeacher }: { newTeacher: any }) => {
     ...newTeacher,
   };
 
-  const res = await fetch(`${server_url}/api/Teacher`, {
+  const res = await fetchWithCorrelation(`${server_url}/api/Teacher`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include", // 👈 Include auth cookies
@@ -34,7 +46,7 @@ const createTeacher = async ({ newTeacher }: { newTeacher: any }) => {
 
 // Update teacher
 const updateTeacher = async ({ updatedTeacher }: { updatedTeacher: any }) => {
-  const res = await fetch(`${server_url}/api/Teacher/${updatedTeacher.id}`, {
+  const res = await fetchWithCorrelation(`${server_url}/api/Teacher/${updatedTeacher.id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     credentials: "include", // 👈 Include auth cookies
@@ -48,7 +60,7 @@ const updateTeacher = async ({ updatedTeacher }: { updatedTeacher: any }) => {
 
 // Delete teacher
 const removeTeacher = async ({ id }: { id: string }) => {
-  const res = await fetch(`${server_url}/api/Teacher/${id}`, {
+  const res = await fetchWithCorrelation(`${server_url}/api/Teacher/${id}`, {
     method: "DELETE",
     credentials: "include", // 👈 Include auth cookies
   });
@@ -60,12 +72,12 @@ const removeTeacher = async ({ id }: { id: string }) => {
 
 
 // Hook
-export const useTeachers = () => {
+export const useTeachers = (paginationParams?: PaginationParams) => {
   const queryClient = useQueryClient();
 
   const query = useQuery({
-    queryKey: ["teachers"],
-    queryFn: fetchTeachers,
+    queryKey: ["teachers", paginationParams],
+    queryFn: () => fetchTeachers(paginationParams),
     staleTime: 60000,
     refetchOnWindowFocus: true,
     retry: 1,

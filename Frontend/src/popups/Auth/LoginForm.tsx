@@ -3,14 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 
-const server_url = import.meta.env.VITE_API_URL;
-
 interface Props {
   onClose: () => void;
   onSwitch: () => void;
+  onForgotPassword?: () => void;
 }
 
-const LoginForm: React.FC<Props> = ({ onClose, onSwitch }) => {
+const LoginForm: React.FC<Props> = ({ onClose, onSwitch, onForgotPassword }) => {
   const [formData, setFormData] = useState({ username: "", password: "" });
   const [errors, setErrors] = useState<{
     username?: string;
@@ -19,7 +18,7 @@ const LoginForm: React.FC<Props> = ({ onClose, onSwitch }) => {
   }>({});
   const [loading, setLoading] = useState(false);
 
-  const { setIsAuthenticated, setUser } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -45,73 +44,15 @@ const LoginForm: React.FC<Props> = ({ onClose, onSwitch }) => {
     }
 
     try {
-      const payload = {
-        username: formData.username,
-        password: formData.password,
-      };
-
-      const res = await fetch(`${server_url}/api/Auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(payload),
-      });
-
-      // Handle both JSON and text responses
-      let json;
-      const contentType = res.headers.get("content-type");
-      if (contentType && contentType.includes("application/json")) {
-        json = await res.json();
-      } else {
-        const text = await res.text();
-        json = { message: text };
-      }
-
-      // Safer check for success
-      const success =
-        res.ok &&
-        (json.isSuccess === undefined ||
-          json.isSuccess === true ||
-          (typeof json.message === "string" &&
-            json.message.toLowerCase().includes("success")));
-
-      if (!success) {
-        const errorMessage =
-          json?.errorMessage ||
-          json?.message ||
-          "Invalid username or password.";
-        setErrors({
-          general: errorMessage,
-        });
-        toast.error(errorMessage);
-        setLoading(false);
-        return;
-      }
-
-      // Fetch user info after successful login
-      const meRes = await fetch(`${server_url}/api/Auth/me`, {
-        method: "GET",
-        credentials: "include",
-      });
-
-      if (!meRes.ok) {
-        throw new Error("Authentication verification failed after login.");
-      }
-
-      const meData = await meRes.json();
-      console.log("Authenticated user:", meData);
-
-      setUser(meData);
-      setIsAuthenticated(true);
-
+      await login(formData.username, formData.password);
       toast.success("✅ Logged in successfully!");
       onClose();
-
       navigate("/dashboard");
     } catch (err: any) {
       console.error(err);
-      toast.error(err.message || "Something went wrong.");
-      setErrors({ general: err.message || "Something went wrong." });
+      const errorMessage = err.message || "Invalid username or password.";
+      toast.error(errorMessage);
+      setErrors({ general: errorMessage });
     } finally {
       setLoading(false);
     }
@@ -163,6 +104,19 @@ const LoginForm: React.FC<Props> = ({ onClose, onSwitch }) => {
             errors.password ? "border-red-500" : "border-gray-300"
           }`}
         />
+        
+        {/* Forgot Password Link */}
+        {onForgotPassword && (
+          <div className="text-right">
+            <button
+              type="button"
+              onClick={onForgotPassword}
+              className="text-sm text-primary-600 hover:underline"
+            >
+              Forgot password?
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Submit */}

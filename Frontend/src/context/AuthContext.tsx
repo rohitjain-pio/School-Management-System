@@ -1,22 +1,17 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
-
-const server_url = import.meta.env.VITE_API_URL;
-
-interface User {
-  id: string;
-  username: string;
-  email: string;
-  schoolId?: string;
-  roles: string[];
-}
+import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { authService, User } from "@/services/authService";
+import { useTokenRefresh, useSessionTimeout } from "@/hooks/useTokenRefresh";
 
 interface AuthContextType {
   isAuthenticated: boolean;
   loading: boolean;
   user: User | null;
-  setIsAuthenticated: (value: boolean) => void;
-  setUser: (user: User | null) => void;
-  logout: () => void;
+  login: (username: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+  checkAuth: () => Promise<void>;
+  refreshToken: () => Promise<void>;
+  hasRole: (role: string) => boolean;
+  hasAnyRole: (roles: string[]) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,16 +23,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
     try {
-      const res = await fetch(`${server_url}/api/Auth/me`, {
-        credentials: "include",
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        console.log("Auth check:", data);
-        setUser(data);
+      const userData = await authService.checkAuth();
+      
+      if (userData) {
+        setUser(userData);
         setIsAuthenticated(true);
       } else {
         setIsAuthenticated(false);
@@ -50,25 +41,60 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  const login = async (username: string, password: string) => {
+    setLoading(true);
+    try {
+      const userData = await authService.login({ userName: username, password });
+      setUser(userData);
+      setIsAuthenticated(true);
+    } catch (error) {
+      console.error("Login failed:", error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
   };
 
   const logout = async () => {
     try {
-      await fetch(`${server_url}/api/Auth/logout`, {
-        method: "POST",
-        credentials: "include",
-      });
+      await authService.logout();
     } catch (error) {
-      console.warn("Logout failed:", error);
+      console.warn("Logout request failed:", error);
     } finally {
       setIsAuthenticated(false);
       setUser(null);
     }
   };
 
+  const refreshToken = async () => {
+    try {
+      await authService.refreshToken();
+    } catch (error) {
+      console.error("Token refresh failed:", error);
+      // If refresh fails, logout the user
+      await logout();
+    }
+  };
+
+  const hasRole = useCallback((role: string): boolean => {
+    return user?.roles?.includes(role) || false;
+  }, [user]);
+
+  const hasAnyRole = useCallback((roles: string[]): boolean => {
+    return roles.some(role => user?.roles?.includes(role)) || false;
+  }, [user]);
+
+  // Auto-refresh token every 2.5 hours
+  useTokenRefresh(isAuthenticated);
+
+  // Show session timeout warning
+  useSessionTimeout(isAuthenticated, logout);
+
   useEffect(() => {
     checkAuth();
-  }, []);
+  }, [checkAuth]);
 
   return (
     <AuthContext.Provider
@@ -76,9 +102,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         isAuthenticated,
         loading,
         user,
-        setIsAuthenticated,
-        setUser,
+        login,
         logout,
+        checkAuth,
+        refreshToken,
+        hasRole,
+        hasAnyRole,
       }}
     >
       {children}

@@ -36,7 +36,7 @@ const AddAnnouncementPopup: React.FC<AddAnnouncementPopupProps> = ({
   useEffect(() => {
     const fetchUserInfo = async () => {
       try {
-        const res = await fetch(`${server_url}/api/Auth/me`, {
+        const res = await fetch(`${server_url}/api/Authentication/me`, {
           credentials: "include",
           cache: "no-store", 
         });

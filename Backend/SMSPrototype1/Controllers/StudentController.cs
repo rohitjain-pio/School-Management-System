@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using SMSDataModel.Model.ApiResult;
+using SMSDataModel.Model.CombineModel;
 using SMSDataModel.Model.Models;
 using SMSDataModel.Model.RequestDtos;
 using SMSServices.Services;
@@ -28,9 +29,10 @@ namespace SMSPrototype1.Controllers
         
         [HttpGet]
         [Authorize(Policy = "TeacherOrAbove")]
-        public async Task<ApiResult<IEnumerable<Student>>> GetAllStudentAsync()
+        [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "pageNumber", "pageSize" })]
+        public async Task<ApiResult<PagedResult<Student>>> GetAllStudentAsync([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
         {
-            var apiResult = new ApiResult<IEnumerable<Student>>();
+            var apiResult = new ApiResult<PagedResult<Student>>();
             try
             {
                 if (!Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
@@ -50,7 +52,13 @@ namespace SMSPrototype1.Controllers
                 {
                     return SetError(apiResult, "User does not have a SchoolId assigned.", HttpStatusCode.BadRequest);
                 } 
-                apiResult.Content = await _studentService.GetAllStudentAsync(user.SchoolId);
+                
+                // Validate pagination parameters
+                if (pageNumber < 1) pageNumber = 1;
+                if (pageSize < 1) pageSize = 10;
+                if (pageSize > 100) pageSize = 100;
+                
+                apiResult.Content = await _studentService.GetAllStudentPagedAsync(user.SchoolId, pageNumber, pageSize);
                 apiResult.IsSuccess = true;
                 apiResult.StatusCode = System.Net.HttpStatusCode.OK;
                 return apiResult;
@@ -65,6 +73,7 @@ namespace SMSPrototype1.Controllers
         }
         [HttpGet("{id}")]
         [Authorize(Policy = "TeacherOrAbove")]
+        [ResponseCache(Duration = 120)]
         public async Task<ApiResult<Student>> GetStudentByIdAsync([FromRoute] Guid id)
         {
             var apiResult = new ApiResult<Student>();
@@ -91,12 +100,18 @@ namespace SMSPrototype1.Controllers
 
         [HttpGet("GetStudentByClassIdAsync/{classId}")]
         [Authorize(Policy = "TeacherOrAbove")]
-        public async Task<ApiResult<IEnumerable<Student>>> GetStudentByClassIdAsync([FromRoute] Guid classId)
+        [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "pageNumber", "pageSize" })]
+        public async Task<ApiResult<PagedResult<Student>>> GetStudentByClassIdAsync([FromRoute] Guid classId, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
         {
-            var apiResult = new ApiResult<IEnumerable<Student>>();
+            var apiResult = new ApiResult<PagedResult<Student>>();
             try
             {
-                apiResult.Content = await _studentService.GetStudentByClassIdAsync(classId);
+                // Validate pagination parameters
+                if (pageNumber < 1) pageNumber = 1;
+                if (pageSize < 1) pageSize = 10;
+                if (pageSize > 100) pageSize = 100;
+                
+                apiResult.Content = await _studentService.GetStudentByClassIdPagedAsync(classId, pageNumber, pageSize);
                 apiResult.IsSuccess = true;
                 apiResult.StatusCode = System.Net.HttpStatusCode.OK;
                 return apiResult;

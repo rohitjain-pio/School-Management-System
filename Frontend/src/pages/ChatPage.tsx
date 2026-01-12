@@ -36,7 +36,7 @@ const ChatPage: React.FC = () => {
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const res = await fetch(`${apiUrl}/api/Auth/me`, {
+        const res = await fetch(`${apiUrl}/api/Authentication/me`, {
           credentials: "include",
         });
         if (res.status === 401) {
@@ -50,7 +50,7 @@ const ChatPage: React.FC = () => {
           console.error("Failed to fetch user info");
         }
       } catch (err) {
-        console.error("Failed to fetch user from /api/Auth/me", err);
+        console.error("Failed to fetch user from /api/Authentication/me", err);
       }
     };
     fetchUser();

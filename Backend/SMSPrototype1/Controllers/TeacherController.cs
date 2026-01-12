@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using SMSDataModel.Model.ApiResult;
+using SMSDataModel.Model.CombineModel;
 using SMSDataModel.Model.Models;
 using SMSDataModel.Model.RequestDtos;
 using SMSRepository.RepositoryInterfaces;
@@ -25,9 +26,10 @@ namespace SMSPrototype1.Controllers
         }
         [HttpGet]
         [Authorize(Policy = "AdminOrSchoolAdmin")]
-        public async Task <ApiResult<IEnumerable<Teacher>>> GetAllTeachersAsync()
+        [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "pageNumber", "pageSize" })]
+        public async Task <ApiResult<PagedResult<Teacher>>> GetAllTeachersAsync([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
         {
-            var apiResult = new ApiResult<IEnumerable<Teacher>>();
+            var apiResult = new ApiResult<PagedResult<Teacher>>();
             if (!ModelState.IsValid)
             {
                 apiResult.IsSuccess = false;
@@ -56,8 +58,13 @@ namespace SMSPrototype1.Controllers
                 {
                     return SetError(apiResult, "User does not have a SchoolId assigned.", HttpStatusCode.BadRequest);
                 }
+                
+                // Validate pagination parameters
+                if (pageNumber < 1) pageNumber = 1;
+                if (pageSize < 1) pageSize = 10;
+                if (pageSize > 100) pageSize = 100;
 
-                apiResult.Content = await _teacherservice.GetAllTeachersAsync(user.SchoolId);
+                apiResult.Content = await _teacherservice.GetAllTeachersPagedAsync(user.SchoolId, pageNumber, pageSize);
                 apiResult.IsSuccess = true;
                 apiResult.StatusCode = System.Net.HttpStatusCode.OK;
                 return apiResult;
@@ -72,6 +79,7 @@ namespace SMSPrototype1.Controllers
         }
         [HttpGet("{id}")]
         [Authorize(Policy = "TeacherOrAbove")]
+        [ResponseCache(Duration = 120)]
         public async Task <ApiResult<Teacher>> GetTeacherByIdAsync([FromRoute] Guid id)
         {
             var apiResult = new ApiResult<Teacher>();

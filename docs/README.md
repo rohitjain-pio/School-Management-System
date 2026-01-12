@@ -49,7 +49,10 @@ MCP server integration:
 - **Framework**: ASP.NET Core Web API
 - **Database**: SQL Server (LocalDB)
 - **ORM**: Entity Framework Core
-- **Authentication**: JWT Bearer Tokens
+- **Authentication**: JWT Bearer Tokens (3-hour access, 7-day refresh)
+- **Authorization**: RBAC with 9 policy-based authorization policies
+- **Validation**: FluentValidation (15 validators)
+- **Security**: SecurityHeaders, RateLimiting, JwtBlacklist middleware
 - **Real-time**: SignalR
 
 ### Frontend (React)
@@ -58,6 +61,8 @@ MCP server integration:
 - **UI Library**: Shadcn/ui with Tailwind CSS
 - **State Management**: React Query
 - **Routing**: React Router v6
+- **Authentication**: AuthContext with auto-refresh, role-based access control
+- **Security**: HttpOnly cookies, session timeout warnings
 
 ### Real-time Communication
 - **Protocol**: SignalR with WebSockets
@@ -99,6 +104,32 @@ MCP server integration:
 
 ---
 
-**Last Updated**: January 8, 2026  
+---
+
+## 🆕 Recent Updates (January 2026)
+
+### Backend Security (Complete)
+✅ JWT Authentication with refresh tokens (3-hour access, 7-day refresh)  
+✅ RBAC Authorization with 9 policies  
+✅ FluentValidation (15 validators)  
+✅ Security Middleware (headers, rate limiting, token blacklist)  
+✅ Password Management (reset, change)  
+✅ Audit Logging  
+✅ Account Lockout  
+
+### Frontend Authentication (Complete)
+✅ Centralized Auth Service (authService.ts)  
+✅ Auto-refresh tokens (every 2.5 hours)  
+✅ Role-based rendering (RoleGate component)  
+✅ Password management UI (forgot, reset, change)  
+✅ Session timeout warnings  
+✅ Enhanced AuthContext with role helpers  
+✅ Updated LoginForm with forgot password link  
+
+**All 8 backend auth endpoints fully integrated in frontend!**
+
+---
+
+**Last Updated**: January 2026  
 **Project Version**: 2.0  
 **Documentation Maintainer**: Development Team

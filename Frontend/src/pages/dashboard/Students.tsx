@@ -18,17 +18,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
 
 import { useStudents } from "@/hooks/useStudents";
 import { useClasses } from "@/hooks/useClasses";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 
 import StudentsSkeleton from "@/skeletons/StudentsSkeleton";
 import AddStudentPopup from "@/popups/students/AddStudentPopup";
@@ -39,19 +32,36 @@ import DeleteStudentPopup from "@/popups/students/DeleteStudentPopup";
 const Students: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [filterClass, setFilterClass] = useState("all");
 
   const {
-    data: students = [],
+    data: studentsResponse,
     isLoading,
     isError,
     error,
     addStudent,
     editStudent,
     deleteStudent,
-  } = useStudents();
+  } = useStudents({ pageNumber: currentPage, pageSize });
 
   const { data: classes = [] } = useClasses();
+
+  // Handle both paginated and non-paginated responses
+  const students = Array.isArray(studentsResponse) 
+    ? studentsResponse 
+    : (studentsResponse?.items ?? []);
+  
+  const paginationInfo = !Array.isArray(studentsResponse) && studentsResponse 
+    ? {
+        pageNumber: studentsResponse.pageNumber,
+        pageSize: studentsResponse.pageSize,
+        totalCount: studentsResponse.totalCount,
+        totalPages: studentsResponse.totalPages,
+        hasPreviousPage: studentsResponse.hasPreviousPage,
+        hasNextPage: studentsResponse.hasNextPage,
+      }
+    : null;
 
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
   const [modal, setModal] = useState<"add" | "edit" | "view" | "delete" | null>(null);
@@ -88,7 +98,7 @@ const Students: React.FC = () => {
     closeModal();
   };
 
-  // Filter & Pagination logic...
+  // Filter & Pagination logic - now using backend pagination, only apply filters client-side
   const filteredStudents = students.filter((s: any) => {
     const matchesSearch =
       s.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -98,10 +108,15 @@ const Students: React.FC = () => {
     return matchesSearch && matchesClass;
   });
 
-  const studentsPerPage = 10;
-  const totalPages = Math.ceil(filteredStudents.length / studentsPerPage);
-  const startIndex = (currentPage - 1) * studentsPerPage;
-  const currentStudents = filteredStudents.slice(startIndex, startIndex + studentsPerPage);
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPageSize(newPageSize);
+    setCurrentPage(1); // Reset to first page when changing page size
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -197,11 +212,14 @@ const Students: React.FC = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {currentStudents.map((student: any, idx: number) => {
+                  {filteredStudents.map((student: any, idx: number) => {
                     const attendance = staticAttendance.find(a => a.studentId === student.id);
+                    const displayIndex = paginationInfo 
+                      ? (paginationInfo.pageNumber - 1) * paginationInfo.pageSize + idx + 1
+                      : idx + 1;
                     return (
                       <TableRow key={student.id}>
-                        <TableCell>{startIndex + idx + 1}</TableCell>
+                        <TableCell>{displayIndex}</TableCell>
                         <TableCell>{student.rollNumber}</TableCell>
                         <TableCell>
                           <div>
@@ -247,27 +265,18 @@ const Students: React.FC = () => {
               </Table>
             </div>
 
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="mt-6">
-                <Pagination>
-                  <PaginationContent>
-                    <PaginationItem>
-                      <PaginationPrevious onClick={() => setCurrentPage(current => Math.max(1, current - 1))} />
-                    </PaginationItem>
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                      <PaginationItem key={page}>
-                        <PaginationLink onClick={() => setCurrentPage(page)} isActive={currentPage === page}>
-                          {page}
-                        </PaginationLink>
-                      </PaginationItem>
-                    ))}
-                    <PaginationItem>
-                      <PaginationNext onClick={() => setCurrentPage(current => Math.min(totalPages, current + 1))} />
-                    </PaginationItem>
-                  </PaginationContent>
-                </Pagination>
-              </div>
+            {/* Pagination Controls */}
+            {paginationInfo && paginationInfo.totalPages > 1 && (
+              <PaginationControls
+                currentPage={paginationInfo.pageNumber}
+                totalPages={paginationInfo.totalPages}
+                pageSize={paginationInfo.pageSize}
+                totalCount={paginationInfo.totalCount}
+                hasPreviousPage={paginationInfo.hasPreviousPage}
+                hasNextPage={paginationInfo.hasNextPage}
+                onPageChange={handlePageChange}
+                onPageSizeChange={handlePageSizeChange}
+              />
             )}
           </CardContent>
         </Card>

@@ -53,7 +53,7 @@ const VideoCallPage: React.FC = () => {
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const res = await fetch(`${apiUrl}/api/Auth/me`, {
+        const res = await fetch(`${apiUrl}/api/Authentication/me`, {
           credentials: "include",
         });
         if (res.status === 401) {

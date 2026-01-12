@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using SMSDataContext.Data;
 using SMSDataModel.Model.Models;
+using SMSDataModel.Model.CombineModel;
 using SMSDataModel.Model.RequestDtos;
 using SMSRepository.RepositoryInterfaces;
 using System;
@@ -22,6 +23,20 @@ namespace SMSRepository.Repository
         {
             return await _context.Teachers.Where(x=>x.SchoolId==schoolId).ToListAsync();
         }
+        
+        public async Task<PagedResult<Teacher>> GetAllTeachersPagedAsync(Guid schoolId, int pageNumber, int pageSize)
+        {
+            var query = _context.Teachers.Where(x=>x.SchoolId==schoolId);
+            
+            var totalCount = await query.CountAsync();
+            var items = await query
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+            
+            return new PagedResult<Teacher>(items, totalCount, pageNumber, pageSize);
+        }
+        
         public async Task<Teacher> GetTeacherByIdAsync(Guid id)
         {
             return await _context.Teachers.FirstOrDefaultAsync(s=> s.Id == id);

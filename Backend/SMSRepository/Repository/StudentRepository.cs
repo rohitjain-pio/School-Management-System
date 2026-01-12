@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using SMSDataContext.Data;
 using SMSDataModel.Model.Models;
+using SMSDataModel.Model.CombineModel;
 using SMSRepository.RepositoryInterfaces;
 using System;
 using System.Collections.Generic;
@@ -23,6 +24,19 @@ namespace SMSRepository.Repository
             return  await _context.Students.Include("Class").Where(x=>x.Class.SchoolId==schoolId).ToListAsync();
         }
 
+        public async Task<PagedResult<Student>> GetAllStudentPagedAsync(Guid schoolId, int pageNumber, int pageSize)
+        {
+            var query = _context.Students.Include("Class").Where(x=>x.Class.SchoolId==schoolId);
+            
+            var totalCount = await query.CountAsync();
+            var items = await query
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+            
+            return new PagedResult<Student>(items, totalCount, pageNumber, pageSize);
+        }
+
         public async Task<Student> GetStudentByIdAsync(Guid studentId)
         {
             return await _context.Students.FirstOrDefaultAsync(s => s.Id == studentId);
@@ -32,6 +46,18 @@ namespace SMSRepository.Repository
             return await _context.Students.Where(x => x.ClassId == classId).ToListAsync();
         }
 
+        public async Task<PagedResult<Student>> GetStudentByClassIdPagedAsync(Guid classId, int pageNumber, int pageSize)
+        {
+            var query = _context.Students.Where(x => x.ClassId == classId);
+            
+            var totalCount = await query.CountAsync();
+            var items = await query
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+            
+            return new PagedResult<Student>(items, totalCount, pageNumber, pageSize);
+        }
 
         public async Task<Student> CreateStudentAsync(Student student)
         {

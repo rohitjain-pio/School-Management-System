@@ -1,0 +1,193 @@
+ <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test AI Error Analysis</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        button {
+            padding: 10px 20px;
+            background: linear-gradient(to right, #3b82f6, #8b5cf6);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            opacity: 0.9;
+        }
+        button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 6px;
+            white-space: pre-line;
+        }
+        .success {
+            background: linear-gradient(to right, #eff6ff, #faf5ff);
+            border: 1px solid #3b82f6;
+        }
+        .error {
+            background: #fee2e2;
+            border: 1px solid #ef4444;
+        }
+        .loading {
+            color: #6b7280;
+        }
+    </style>
+</head>
+<body>
+    <h1>🤖 AI Error Analysis Test</h1>
+    
+    <div class="test-section">
+        <h3>Test 1: Analyze a Sample Error</h3>
+        <button id="testBtn1" onclick="testAnalyzeError()">🤖 Analyze with AI</button>
+        <div id="result1"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>Test 2: Check Caching</h3>
+        <p>Click the button twice - second time should be cached</p>
+        <button id="testBtn2" onclick="testCaching()">🤖 Test Cache</button>
+        <div id="result2"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>Test 3: Test Connection</h3>
+        <button id="testBtn3" onclick="testConnection()">Test Gemini Connection</button>
+        <div id="result3"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:7266/api/Debug';
+
+        async function testAnalyzeError() {
+            const btn = document.getElementById('testBtn1');
+            const result = document.getElementById('result1');
+            
+            btn.disabled = true;
+            result.className = 'result loading';
+            result.textContent = '⏳ Analyzing...';
+
+            try {
+                const response = await fetch(`${API_BASE}/analyze-error`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        category: 'NullReferenceException',
+                        message: 'Object reference not set to an instance of an object',
+                        stackTrace: 'at MyApp.Services.UserService.GetUser(Int32 id) in UserService.cs:line 45',
+                        metadata: {
+                            userId: '12345',
+                            endpoint: '/api/users'
+                        }
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    result.className = 'result success';
+                    result.textContent = `✅ Success!\n\n${data.suggestion}\n\n${data.cached ? '(From cache)' : '(Fresh analysis)'}\nTokens used: ${data.tokensUsed || 0}`;
+                } else {
+                    result.className = 'result error';
+                    result.textContent = `❌ Error: ${data.message || data.error}`;
+                }
+            } catch (error) {
+                result.className = 'result error';
+                result.textContent = `❌ Network Error: ${error.message}\n\nMake sure the backend server is running on http://localhost:7266`;
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        let cacheTestCount = 0;
+        async function testCaching() {
+            const btn = document.getElementById('testBtn2');
+            const result = document.getElementById('result2');
+            
+            btn.disabled = true;
+            cacheTestCount++;
+            result.className = 'result loading';
+            result.textContent = `⏳ Test ${cacheTestCount}: Analyzing...`;
+
+            try {
+                const response = await fetch(`${API_BASE}/analyze-error`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        category: 'CacheTest',
+                        message: 'This is a cache test error',
+                        stackTrace: 'at Program.Main()'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    result.className = 'result success';
+                    result.textContent = `✅ Test ${cacheTestCount} Success!\n\n${data.suggestion}\n\n${data.cached ? '🎯 FROM CACHE!' : '🆕 FRESH API CALL'}\nTokens used: ${data.tokensUsed || 0}`;
+                } else {
+                    result.className = 'result error';
+                    result.textContent = `❌ Test ${cacheTestCount} Error: ${data.message || data.error}`;
+                }
+            } catch (error) {
+                result.className = 'result error';
+                result.textContent = `❌ Network Error: ${error.message}`;
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        async function testConnection() {
+            const btn = document.getElementById('testBtn3');
+            const result = document.getElementById('result3');
+            
+            btn.disabled = true;
+            result.className = 'result loading';
+            result.textContent = '⏳ Testing connection...';
+
+            try {
+                const response = await fetch(`${API_BASE}/gemini/test`, {
+                    method: 'GET',
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    result.className = 'result success';
+                    result.textContent = `✅ Connection Successful!\n\n${data.suggestion}\nModel: ${data.model || 'N/A'}`;
+                } else {
+                    result.className = 'result error';
+                    result.textContent = `❌ Connection Failed: ${data.message}`;
+                }
+            } catch (error) {
+                result.className = 'result error';
+                result.textContent = `❌ Network Error: ${error.message}\n\nMake sure the backend server is running on http://localhost:7266`;
+            } finally {
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>

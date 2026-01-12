@@ -22,7 +22,7 @@ const AddRoomPopup: React.FC<AddRoomPopupProps> = ({ isOpen, onClose, onSubmit }
   useEffect(() => {
     const fetchUserInfo = async () => {
       try {
-        const res = await fetch(`${server_url}/api/Auth/me`, {
+        const res = await fetch(`${server_url}/api/Authentication/me`, {
           credentials: "include",
           cache: "no-store",
         });

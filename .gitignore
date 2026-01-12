@@ -386,7 +386,7 @@ Frontend/bun.lockb
 prompts/
 
 # MCP temporary servers
-mcp/temp-mcp-servers/
+mcp/
 
 # Backend recordings and performance tests
 Backend/Recordings/

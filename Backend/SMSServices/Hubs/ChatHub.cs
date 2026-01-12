@@ -1,44 +1,21 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
-using Microsoft.EntityFrameworkCore;
-using SMSDataContext.Data;
 using SMSDataModel.Model.Models;
+using SMSServices.ServicesInterfaces;
 using SMSServices.Services;
-using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
 using System.Security.Claims;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace SMSServices.Hubs
 {
     [Authorize]
     public class ChatHub : Hub
     {
-        private readonly DataContext _context;
-        private readonly IMessageEncryptionService _encryptionService;
+        private readonly IChatService _chatService;
         private readonly IRoomAccessTokenService _roomTokenService;
 
-        // Track users in each room: RoomId -> List of (ConnectionId, Username, UserId)
-        private static readonly ConcurrentDictionary<string, ConcurrentDictionary<string, (string Username, string UserId)>> _roomUsers 
-            = new ConcurrentDictionary<string, ConcurrentDictionary<string, (string Username, string UserId)>>();
-
-        // Track user message counts for flood protection: UserId -> (RoomId -> Queue<DateTime>)
-        private static readonly ConcurrentDictionary<string, ConcurrentDictionary<string, Queue<DateTime>>> _userMessageCounts
-            = new ConcurrentDictionary<string, ConcurrentDictionary<string, Queue<DateTime>>>();
-
-        private const int MaxMessagesPerMinute = 30;
-        private static readonly TimeSpan FloodProtectionWindow = TimeSpan.FromMinutes(1);
-
-        public ChatHub(
-            DataContext context,
-            IMessageEncryptionService encryptionService,
-            IRoomAccessTokenService roomTokenService)
+        public ChatHub(IChatService chatService, IRoomAccessTokenService roomTokenService)
         {
-            _context = context;
-            _encryptionService = encryptionService;
+            _chatService = chatService;
             _roomTokenService = roomTokenService;
         }
 
@@ -60,46 +37,19 @@ namespace SMSServices.Hubs
                 throw new HubException("Unauthorized: Invalid room access token");
             }
 
-            // Verify room exists and user has access
-            var room = await _context.ChatRooms
-                .Include(r => r.Participants)
-                .FirstOrDefaultAsync(r => r.Id == Guid.Parse(roomId));
-
-            if (room == null)
+            // Validate room access using service
+            if (!await _chatService.ValidateRoomAccessAsync(roomId, userId))
             {
-                throw new HubException("Room not found");
-            }
-
-            if (!room.IsActive)
-            {
-                throw new HubException("Room is not active");
-            }
-
-            // Check participant limit
-            var currentCount = room.Participants?.Count ?? 0;
-            if (currentCount >= room.MaxParticipants)
-            {
-                throw new HubException("Room is full");
-            }
-
-            // Verify user is a participant
-            var isParticipant = await _context.ChatRoomUsers
-                .AnyAsync(ru => ru.RoomId == Guid.Parse(roomId) && ru.UserId == Guid.Parse(userId));
-
-            if (!isParticipant)
-            {
-                throw new HubException("Unauthorized: Not a room participant");
+                throw new HubException("Room access denied");
             }
 
             await Groups.AddToGroupAsync(Context.ConnectionId, roomId);
             
-            // Track user in room
-            var users = _roomUsers.GetOrAdd(roomId, _ => new ConcurrentDictionary<string, (string, string)>());
-            users.TryAdd(Context.ConnectionId, (username, userId));
+            // Track user in room using service
+            _chatService.AddUserToRoom(roomId, Context.ConnectionId, username, userId);
             
             // Update room activity
-            room.LastActivityAt = DateTime.UtcNow;
-            await _context.SaveChangesAsync();
+            await _chatService.UpdateRoomActivityAsync(roomId);
 
             // Notify all users in room about updated user list
             await NotifyUserListUpdated(roomId);
@@ -113,22 +63,20 @@ namespace SMSServices.Hubs
         {
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, roomId);
             
-            // Remove user from tracking
-            if (_roomUsers.TryGetValue(roomId, out var users))
+            // Remove user from tracking using service
+            var user = _chatService.RemoveUserFromRoom(roomId, Context.ConnectionId);
+            if (user.HasValue)
             {
-                if (users.TryRemove(Context.ConnectionId, out var user))
-                {
-                    // Notify remaining users
-                    await NotifyUserListUpdated(roomId);
-                    await Clients.OthersInGroup(roomId).SendAsync("UserLeft", user.Username);
-                }
+                // Notify remaining users
+                await NotifyUserListUpdated(roomId);
+                await Clients.OthersInGroup(roomId).SendAsync("UserLeft", user.Value.Username);
             }
         }
 
         public async Task SendTyping(string roomId, string user)
         {
-            // Verify user is in room
-            if (!_roomUsers.TryGetValue(roomId, out var users) || !users.ContainsKey(Context.ConnectionId))
+            // Verify user is in room using service
+            if (!_chatService.IsUserInRoom(roomId, Context.ConnectionId))
             {
                 return; // Silently ignore if not in room
             }
@@ -159,32 +107,27 @@ namespace SMSServices.Hubs
                 throw new HubException("Unauthorized: Invalid user");
             }
 
-            if (!Guid.TryParse(roomId, out var roomGuid))
-            {
-                throw new HubException("Invalid room ID");
-            }
-
-            // Verify user is in room
-            if (!_roomUsers.TryGetValue(roomId, out var users) || !users.ContainsKey(Context.ConnectionId))
+            // Verify user is in room using service
+            if (!_chatService.IsUserInRoom(roomId, Context.ConnectionId))
             {
                 throw new HubException("Unauthorized: Not in room");
             }
 
-            // Flood protection
-            if (!CheckFloodProtection(userIdStr, roomId))
+            // Flood protection using service
+            if (!_chatService.CheckFloodProtection(userIdStr, roomId))
             {
                 throw new HubException("Rate limit exceeded. Please slow down.");
             }
 
             // Get room to check if encryption is enabled
-            var room = await _context.ChatRooms.FindAsync(roomGuid);
+            var room = await _chatService.GetRoomAsync(roomId);
             if (room == null)
             {
                 throw new HubException("Room not found");
             }
 
-            // Sanitize message content (basic XSS prevention)
-            var sanitizedMessage = SanitizeMessage(message);
+            // Sanitize message using service
+            var sanitizedMessage = _chatService.SanitizeMessage(message);
 
             // Encrypt message if room has encryption enabled
             string contentToStore = sanitizedMessage;
@@ -192,7 +135,7 @@ namespace SMSServices.Hubs
             {
                 try
                 {
-                    contentToStore = _encryptionService.Encrypt(sanitizedMessage, roomId);
+                    contentToStore = _chatService.EncryptMessage(sanitizedMessage, roomId);
                 }
                 catch (Exception ex)
                 {
@@ -200,22 +143,8 @@ namespace SMSServices.Hubs
                 }
             }
 
-            // Save encrypted message to database
-            var chatMessage = new ChatMessage
-            {
-                RoomId = roomGuid,
-                UserId = userId,
-                Content = contentToStore,
-                Timestamp = DateTime.UtcNow,
-                IsDeleted = false,
-                IsEdited = false
-            };
-
-            _context.ChatMessages.Add(chatMessage);
-
-            // Update room activity
-            room.LastActivityAt = DateTime.UtcNow;
-            await _context.SaveChangesAsync();
+            // Save message using service
+            var chatMessage = await _chatService.SaveMessageAsync(roomId, userIdStr, contentToStore, room.IsEncrypted);
 
             // Broadcast message to all users in room (send decrypted version)
             await Clients.Group(roomId).SendAsync("ReceiveMessage", new
@@ -231,39 +160,27 @@ namespace SMSServices.Hubs
         // Load message history for a room with decryption
         public async Task<List<object>> LoadMessageHistory(string roomId, int count = 50)
         {
-            if (!Guid.TryParse(roomId, out var roomGuid))
-            {
-                throw new HubException("Invalid room ID");
-            }
-
-            // Verify user is in room
+            // Verify user is authenticated
             var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(userId))
             {
                 throw new HubException("Unauthorized");
             }
 
-            var isParticipant = await _context.ChatRoomUsers
-                .AnyAsync(ru => ru.RoomId == roomGuid && ru.UserId == Guid.Parse(userId));
-
-            if (!isParticipant)
+            // Verify user is a participant using service
+            if (!await _chatService.IsUserParticipantAsync(roomId, userId))
             {
                 throw new HubException("Unauthorized: Not a room participant");
             }
 
-            var room = await _context.ChatRooms.FindAsync(roomGuid);
+            var room = await _chatService.GetRoomAsync(roomId);
             if (room == null)
             {
                 throw new HubException("Room not found");
             }
 
-            // Get last N messages from database
-            var messages = await _context.ChatMessages
-                .Where(m => m.RoomId == roomGuid && !m.IsDeleted)
-                .OrderByDescending(m => m.Timestamp)
-                .Take(count)
-                .Include(m => m.User)
-                .ToListAsync();
+            // Get message history from service
+            var messages = await _chatService.GetMessageHistoryAsync(roomId, count);
 
             // Decrypt messages if needed
             var decryptedMessages = messages.Select(m =>
@@ -271,14 +188,7 @@ namespace SMSServices.Hubs
                 var content = m.Content;
                 if (room.IsEncrypted)
                 {
-                    try
-                    {
-                        content = _encryptionService.Decrypt(m.Content, roomId);
-                    }
-                    catch
-                    {
-                        content = "[Decryption failed]";
-                    }
+                    content = _chatService.DecryptMessage(m.Content, roomId);
                 }
 
                 return new
@@ -301,21 +211,21 @@ namespace SMSServices.Hubs
         // Handle disconnection
         public override async Task OnDisconnectedAsync(Exception? exception)
         {
-            // Remove user from all rooms they were in
-            foreach (var room in _roomUsers)
+            // Remove user from all rooms using service
+            var affectedRooms = _chatService.RemoveUserFromAllRooms(Context.ConnectionId);
+            
+            var username = Context.User?.FindFirst(ClaimTypes.Name)?.Value ?? "Unknown";
+            foreach (var roomId in affectedRooms)
             {
-                if (room.Value.TryRemove(Context.ConnectionId, out var user))
-                {
-                    await NotifyUserListUpdated(room.Key);
-                    await Clients.Group(room.Key).SendAsync("UserLeft", user.Username);
-                }
+                await NotifyUserListUpdated(roomId);
+                await Clients.Group(roomId).SendAsync("UserLeft", username);
             }
 
             // Clean up message count tracking
             var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (!string.IsNullOrEmpty(userId))
             {
-                _userMessageCounts.TryRemove(userId, out _);
+                _chatService.CleanupUserTracking(userId);
             }
             
             await base.OnDisconnectedAsync(exception);
@@ -323,51 +233,8 @@ namespace SMSServices.Hubs
 
         private async Task NotifyUserListUpdated(string roomId)
         {
-            if (_roomUsers.TryGetValue(roomId, out var users))
-            {
-                var userList = users.Values.Select(u => u.Username).Distinct().ToList();
-                await Clients.Group(roomId).SendAsync("UserListUpdated", userList);
-            }
-        }
-
-        private bool CheckFloodProtection(string userId, string roomId)
-        {
-            var userRooms = _userMessageCounts.GetOrAdd(userId, _ => new ConcurrentDictionary<string, Queue<DateTime>>());
-            var messageQueue = userRooms.GetOrAdd(roomId, _ => new Queue<DateTime>());
-
-            lock (messageQueue)
-            {
-                var now = DateTime.UtcNow;
-
-                // Remove old messages outside the window
-                while (messageQueue.Count > 0 && now - messageQueue.Peek() > FloodProtectionWindow)
-                {
-                    messageQueue.Dequeue();
-                }
-
-                // Check if limit exceeded
-                if (messageQueue.Count >= MaxMessagesPerMinute)
-                {
-                    return false;
-                }
-
-                messageQueue.Enqueue(now);
-                return true;
-            }
-        }
-
-        private string SanitizeMessage(string message)
-        {
-            if (string.IsNullOrEmpty(message))
-                return message;
-
-            // Basic XSS prevention - encode HTML entities
-            message = System.Net.WebUtility.HtmlEncode(message);
-
-            // Optional: Filter profanity (implement as needed)
-            // message = ProfanityFilter(message);
-
-            return message;
+            var userList = _chatService.GetRoomUsernames(roomId);
+            await Clients.Group(roomId).SendAsync("UserListUpdated", userList);
         }
     }
 }

@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Plus, Mail, Search, Filter, Edit, Trash2, Eye, UserIcon } from "lucide-react";
 import { useTeachers } from "@/hooks/useTeachers";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import TeachersSkeleton from "@/skeletons/TeachersSkeleton";
 import AddTeacherPopup from "@/popups/teachers/AddTeacherPopup";
 import EditTeacherPopup from "@/popups/teachers/EditTeacherPopup";
@@ -20,22 +21,40 @@ import DeleteTeacherPopup from "@/popups/teachers/DeleteTeacherPopup";
 const Teachers: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterSubject, setFilterSubject] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const {
-    data: teachers,
+    data: teachersResponse,
     isLoading,
     isError,
     error,
     addTeacher,
     editTeacher,
     deleteTeacher,
-  } = useTeachers();
+  } = useTeachers({ pageNumber: currentPage, pageSize });
 
   const [selectedTeacher, setSelectedTeacher] = useState(null);
   const [modal, setModal] = useState<"add" | "edit" | "view" | "delete" | null>(
     null
   );
   const [isOpen, setIsOpen] = useState(false);
+
+  // Handle both paginated and non-paginated responses
+  const teachers = Array.isArray(teachersResponse) 
+    ? teachersResponse 
+    : (teachersResponse?.items ?? []);
+  
+  const paginationInfo = !Array.isArray(teachersResponse) && teachersResponse 
+    ? {
+        pageNumber: teachersResponse.pageNumber,
+        pageSize: teachersResponse.pageSize,
+        totalCount: teachersResponse.totalCount,
+        totalPages: teachersResponse.totalPages,
+        hasPreviousPage: teachersResponse.hasPreviousPage,
+        hasNextPage: teachersResponse.hasNextPage,
+      }
+    : null;
 
   const openModal = (
     type: "add" | "edit" | "view" | "delete",
@@ -68,6 +87,16 @@ const Teachers: React.FC = () => {
   const handleDelete = async (id: string) => {
     await deleteTeacher({ id });
     closeModal();
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPageSize(newPageSize);
+    setCurrentPage(1); // Reset to first page when changing page size
   };
 
   const subjects = [
@@ -164,9 +193,13 @@ const Teachers: React.FC = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredTeachers.map((teacher, index) => (
-                  <TableRow key={teacher.id}>
-                    <TableCell>{index + 1}</TableCell>
+                {filteredTeachers.map((teacher, index) => {
+                  const displayIndex = paginationInfo 
+                    ? (paginationInfo.pageNumber - 1) * paginationInfo.pageSize + index + 1
+                    : index + 1;
+                  return (
+                    <TableRow key={teacher.id}>
+                      <TableCell>{displayIndex}</TableCell>
                     <TableCell>
                       <div>
                         <div className="font-medium">{teacher.name}</div>
@@ -220,9 +253,24 @@ const Teachers: React.FC = () => {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                );
+                })}
               </TableBody>
             </Table>
+
+            {/* Pagination Controls */}
+            {paginationInfo && paginationInfo.totalPages > 1 && (
+              <PaginationControls
+                currentPage={paginationInfo.pageNumber}
+                totalPages={paginationInfo.totalPages}
+                pageSize={paginationInfo.pageSize}
+                totalCount={paginationInfo.totalCount}
+                hasPreviousPage={paginationInfo.hasPreviousPage}
+                hasNextPage={paginationInfo.hasNextPage}
+                onPageChange={handlePageChange}
+                onPageSizeChange={handlePageSizeChange}
+              />
+            )}
           </CardContent>
         </Card>
 

@@ -1,0 +1,28 @@
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  
+  "Encryption": {
+    "MasterKey": "YOUR_MASTER_KEY_HERE"
+  },
+
+  "VideoRecordings": {
+    "Path": "D:\\Path\\To\\Your\\Recordings"
+  },
+
+  "Gemini": {
+    "ApiKey": "YOUR_GEMINI_API_KEY_HERE",
+    "Model": "gemini-1.5-flash",
+    "Endpoint": "https://generativelanguage.googleapis.com/v1beta/models",
+    "MaxTokens": 500,
+    "Temperature": 0.7,
+    "RateLimits": {
+      "PerMinute": 10,
+      "PerDay": 100
+    }
+  }
+}

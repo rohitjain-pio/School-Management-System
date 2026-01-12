@@ -1,4 +1,5 @@
 ﻿using SMSDataModel.Model.Models;
+using SMSDataModel.Model.CombineModel;
 using SMSDataModel.Model.RequestDtos;
 using System;
 using System.Collections.Generic;
@@ -11,8 +12,10 @@ namespace SMSServices.ServicesInterfaces
     public interface IStudentService
     {
         Task<IEnumerable<Student>> GetAllStudentAsync(Guid schoolId);
+        Task<PagedResult<Student>> GetAllStudentPagedAsync(Guid schoolId, int pageNumber, int pageSize);
         Task<Student> GetStudentByIdAsync(Guid studentId);
         Task<IEnumerable<Student>> GetStudentByClassIdAsync(Guid classId);
+        Task<PagedResult<Student>> GetStudentByClassIdPagedAsync(Guid classId, int pageNumber, int pageSize);
         Task<Student> CreateStudentAsync(CreateStudentRqstDto createStudent);
         Task<Student> UpdateStudentAsync(Guid id, UpdateStudentRequestDto updateStudentRequestDto);
         Task<Student> DeleteStudentAsync(Guid id);

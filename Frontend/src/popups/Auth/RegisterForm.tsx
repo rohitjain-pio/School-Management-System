@@ -117,7 +117,7 @@ const RegisterForm: React.FC<Props> = ({ onClose, onSwitch }) => {
         schoolId: formData.schoolId,
       };
 
-      const res = await fetch(`${server_url}/api/Auth/register`, {
+      const res = await fetch(`${server_url}/api/Registration/register`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

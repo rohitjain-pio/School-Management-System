@@ -31,8 +31,15 @@ import AttendanceTable from "./pages/dashboard/Attendance";
 import ScrollToTop from "./components/ScrollToTop";
 import LoginForm from "./popups/Auth/LoginForm";
 import RegisterForm from "./popups/Auth/RegisterForm";
+import ForgotPasswordForm from "./popups/Auth/ForgotPasswordForm";
+import ResetPasswordForm from "./popups/Auth/ResetPasswordForm";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider } from "./context/AuthContext";
+import { ErrorMonitorProvider, useErrorMonitor } from "./context/ErrorMonitorContext";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { ErrorMonitorButton } from "./components/ErrorMonitorButton";
+import { ErrorMonitorModal } from "./components/ErrorMonitorModal";
+import { useErrorPolling } from "./hooks/useErrorPolling";
 import UnauthorizedPage from "./pages/UnauthorizedPage";
 import MeetingRooms from "./pages/dashboard/Meeting";
 import ChatPage from "./pages/ChatPage";
@@ -42,7 +49,8 @@ const queryClient = new QueryClient();
 
 const App: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalType, setModalType] = useState<"login" | "register" | null>(null);
+  const [modalType, setModalType] = useState<"login" | "register" | "forgot" | null>(null);
+  const [errorMonitorOpen, setErrorMonitorOpen] = useState(false);
 
   const openLogin = () => {
     setModalType("login");
@@ -51,6 +59,11 @@ const App: React.FC = () => {
 
   const openRegister = () => {
     setModalType("register");
+    setModalOpen(true);
+  };
+
+  const openForgotPassword = () => {
+    setModalType("forgot");
     setModalOpen(true);
   };
 
@@ -67,7 +80,54 @@ const App: React.FC = () => {
         <BrowserRouter>
           <ScrollToTop />
           <AuthProvider>
-            <Modal isOpen={modalOpen} onClose={closeModal}>
+            <ErrorMonitorProvider>
+              <ErrorBoundaryWithContext
+                errorMonitorOpen={errorMonitorOpen}
+                setErrorMonitorOpen={setErrorMonitorOpen}
+              >
+                <AppContent 
+                  modalOpen={modalOpen}
+                  modalType={modalType}
+                  closeModal={closeModal}
+                  openLogin={openLogin}
+                  openRegister={openRegister}
+                  openForgotPassword={openForgotPassword}
+                  setModalType={setModalType}
+                />
+              </ErrorBoundaryWithContext>
+            </ErrorMonitorProvider>
+          </AuthProvider>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+};
+
+interface AppContentProps {
+  modalOpen: boolean;
+  modalType: "login" | "register" | "forgot" | null;
+  closeModal: () => void;
+  openLogin: () => void;
+  openRegister: () => void;
+  openForgotPassword: () => void;
+  setModalType: React.Dispatch<React.SetStateAction<"login" | "register" | "forgot" | null>>;
+}
+
+const AppContent: React.FC<AppContentProps> = ({
+  modalOpen,
+  modalType,
+  closeModal,
+  openLogin,
+  openRegister,
+  openForgotPassword,
+  setModalType,
+}) => {
+  // Set up error polling
+  useErrorPolling(5000);
+
+  return (
+    <>
+            <Modal isOpen={modalOpen} onClose={closeModal} priority="low">
               {modalType === "register" && (
                 <RegisterForm
                   onClose={closeModal}
@@ -78,6 +138,16 @@ const App: React.FC = () => {
                 <LoginForm
                   onClose={closeModal}
                   onSwitch={() => setModalType("register")}
+                  onForgotPassword={openForgotPassword}
+                />
+              )}
+              {modalType === "forgot" && (
+                <ForgotPasswordForm
+                  onClose={closeModal}
+                  onSuccess={() => {
+                    closeModal();
+                    // Optionally show success message
+                  }}
                 />
               )}
             </Modal>
@@ -169,16 +239,23 @@ const App: React.FC = () => {
                 </Route>
               </Route>
 
+              {/* Password Reset Route (Public) */}
+              <Route
+                path="/reset-password"
+                element={
+                  <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 to-blue-50">
+                    <ResetPasswordForm />
+                  </div>
+                }
+              />
+
               {/* 404 */}
               <Route path="*" element={<NotFound />} />
 
               {/* Unauthorized Path */}
               <Route path="/unauthorized" element={<UnauthorizedPage />} />
             </Routes>
-          </AuthProvider>
-        </BrowserRouter>
-      </TooltipProvider>
-    </QueryClientProvider>
+    </>
   );
 };
 
@@ -199,6 +276,29 @@ const PageLayout: React.FC<PageLayoutProps> = ({
     <Footer />
   </div>
 );
+
+// Wrapper to connect ErrorBoundary with ErrorMonitorContext
+interface ErrorBoundaryWithContextProps {
+  children: React.ReactNode;
+  errorMonitorOpen: boolean;
+  setErrorMonitorOpen: (open: boolean) => void;
+}
+
+const ErrorBoundaryWithContext: React.FC<ErrorBoundaryWithContextProps> = ({ 
+  children, 
+  errorMonitorOpen, 
+  setErrorMonitorOpen 
+}) => {
+  const { addError } = useErrorMonitor();
+  
+  return (
+    <ErrorBoundary addError={addError}>
+      {children}
+      <ErrorMonitorButton onClick={() => setErrorMonitorOpen(true)} />
+      <ErrorMonitorModal isOpen={errorMonitorOpen} onClose={() => setErrorMonitorOpen(false)} />
+    </ErrorBoundary>
+  );
+};
 
 export default App;
 
