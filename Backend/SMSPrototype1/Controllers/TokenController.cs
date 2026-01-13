@@ -72,9 +72,9 @@ namespace SMSPrototype1.Controllers
                 new Claim(JwtRegisteredClaimNames.Jti, jti)
             };
 
-            if (user.SchoolId != null)
+            if (user.SchoolId != Guid.Empty)
             {
-                authClaims.Add(new Claim("SchoolId", user.SchoolId.ToString()!));
+                authClaims.Add(new Claim("SchoolId", user.SchoolId.ToString()));
             }
 
             authClaims.AddRange(userRoles.Select(role => new Claim(ClaimTypes.Role, role)));

@@ -45,7 +45,7 @@ class AuthService {
    * Login user with credentials
    */
   async login(credentials: LoginCredentials): Promise<User> {
-    const response = await fetch(`${API_URL}/api/Authentication/login`, {
+    const response = await fetch(`${API_URL}/api/Auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',

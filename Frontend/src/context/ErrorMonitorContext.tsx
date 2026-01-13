@@ -30,9 +30,22 @@ export const ErrorMonitorProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [isPolling, setIsPolling] = useState(false);
 
   const addError = useCallback((error: Omit<ErrorEntry, 'id' | 'timestamp'>) => {
+    // Fallback for browsers that don't support crypto.randomUUID
+    const generateId = () => {
+      if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+      }
+      // Fallback: generate a UUID v4 compatible string
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    };
+
     const newError: ErrorEntry = {
       ...error,
-      id: crypto.randomUUID(),
+      id: generateId(),
       timestamp: new Date().toISOString(),
     };
 
@@ -66,9 +79,13 @@ export const ErrorMonitorProvider: React.FC<{ children: React.ReactNode }> = ({ 
       if (response.ok) {
         const data = await response.json();
         setBackendErrors(data);
+      } else {
+        // Log the error but don't throw - this is expected when backend is not available
+        console.warn(`Failed to fetch backend errors: ${response.status} ${response.statusText}`);
       }
     } catch (error) {
-      console.error('Failed to fetch backend errors:', error);
+      // Network error or CORS issue - log but don't fail
+      console.warn('Could not connect to backend error service:', error instanceof Error ? error.message : String(error));
     }
   }, []);
 

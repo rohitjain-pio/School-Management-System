@@ -64,23 +64,36 @@ const AddClassPopup: React.FC<AddClassPopupProps> = ({
     onClose();
   };
 
-  const [teachers, setTeachers] = useState([]);
+  const [teachers, setTeachers] = useState<any[]>([]);
 
   const fetchTeachers = async () => {
-    const res = await fetch(`${server_url}/api/Teacher`,{
-    credentials: "include", 
-  });
-    if (!res.ok) throw new Error(res.statusText);
-    const json = await res.json();
-    if (!json.isSuccess) throw new Error(json.errorMessage);
-    setTeachers(json.content);
-    return json;
-  }
+    try {
+      const res = await fetch(`${server_url}/api/Teacher`, {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        console.error("Failed to fetch teachers:", res.statusText);
+        return;
+      }
+      const json = await res.json();
+      if (!json.isSuccess) {
+        console.error("API error:", json.errorMessage);
+        return;
+      }
+      // Ensure we're setting an array
+      const teachersData = Array.isArray(json.content) ? json.content : [];
+      setTeachers(teachersData);
+    } catch (error) {
+      console.error("Error fetching teachers:", error);
+      setTeachers([]);
+    }
+  };
 
   useEffect(() => {
-    const timeout = setTimeout(() => fetchTeachers(), 1000);
-    return () => clearTimeout(timeout);
-  }, [])
+    if (isOpen) {
+      fetchTeachers();
+    }
+  }, [isOpen])
 
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -135,7 +148,17 @@ const AddClassPopup: React.FC<AddClassPopupProps> = ({
                 <SelectValue placeholder="Select class teacher" />
               </SelectTrigger>
               <SelectContent>
-                {teachers?.map((teacher) => (<SelectItem value={teacher.id}>{teacher.name}</SelectItem>))}
+                {teachers && teachers.length > 0 ? (
+                  teachers.map((teacher) => (
+                    <SelectItem key={teacher.id} value={teacher.id}>
+                      {teacher.name}
+                    </SelectItem>
+                  ))
+                ) : (
+                  <SelectItem value="no-teachers" disabled>
+                    No teachers available
+                  </SelectItem>
+                )}
               </SelectContent>
             </Select>
           </div>

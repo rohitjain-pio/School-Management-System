@@ -56,7 +56,7 @@ namespace SMSPrototype1.Controllers
                 }
 
                
-                if (user.SchoolId == null)
+                if (user.SchoolId == Guid.Empty)
                 {
                     return SetError(apiResult, "User does not have a SchoolId assigned.", HttpStatusCode.BadRequest);
                 }

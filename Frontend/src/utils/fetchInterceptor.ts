@@ -14,10 +14,15 @@ export const setupFetchInterceptor = () => {
   window.fetch = async (...args) => {
     try {
       const response = await originalFetch(...args);
+      const url = typeof args[0] === 'string' ? args[0] : args[0].url;
+
+      // Don't log errors from the Debug endpoint to avoid recursion
+      if (url.includes('/api/Debug/')) {
+        return response;
+      }
 
       // Log failed requests
       if (!response.ok && errorCallback) {
-        const url = typeof args[0] === 'string' ? args[0] : args[0].url;
         const method = typeof args[1] === 'object' && args[1]?.method ? args[1].method : 'GET';
         
         let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
@@ -31,6 +36,8 @@ export const setupFetchInterceptor = () => {
             const errorData = await clonedResponse.json();
             if (errorData.error?.message) {
               errorMessage = errorData.error.message;
+            } else if (errorData.message) {
+              errorMessage = errorData.message;
             }
             
             // Categorize based on response
@@ -48,7 +55,7 @@ export const setupFetchInterceptor = () => {
 
         errorCallback({
           category,
-          message: errorMessage,
+          message: `${method} ${url}: ${errorMessage}`,
           source: url,
           metadata: {
             method,
@@ -60,18 +67,31 @@ export const setupFetchInterceptor = () => {
 
       return response;
     } catch (error) {
-      // Network error (no response)
+      // Network error (no response) - likely CORS or network failure
+      const url = typeof args[0] === 'string' ? args[0] : args[0].url;
+      
+      // Don't log errors from the Debug endpoint to avoid recursion
+      if (url.includes('/api/Debug/')) {
+        throw error;
+      }
+
       if (errorCallback) {
-        const url = typeof args[0] === 'string' ? args[0] : args[0].url;
         const method = typeof args[1] === 'object' && args[1]?.method ? args[1].method : 'GET';
+        const errorMessage = error instanceof Error ? error.message : 'Network request failed';
+        
+        // Check if it's a CORS error
+        const isCorsError = errorMessage.includes('CORS') || 
+                           errorMessage.includes('Network request failed') ||
+                           errorMessage.includes('Failed to fetch');
 
         errorCallback({
-          category: 'Network',
-          message: error instanceof Error ? error.message : 'Network request failed',
+          category: isCorsError ? 'Network' : 'Frontend',
+          message: `${method} ${url}: ${errorMessage}${isCorsError ? ' (CORS or network issue)' : ''}`,
           stackTrace: error instanceof Error ? error.stack : undefined,
           source: url,
           metadata: {
             method,
+            type: isCorsError ? 'CORS/Network' : 'Error',
           },
         });
       }

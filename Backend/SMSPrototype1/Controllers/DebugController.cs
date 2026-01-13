@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
 using SMSServices.Services;
+using Microsoft.AspNetCore.Authorization;
 
 namespace SMSPrototype1.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[AllowAnonymous] // Allow access in development without authentication
 public class DebugController : ControllerBase
 {
     private readonly IErrorLogService _errorLogService;

@@ -32,6 +32,10 @@ namespace SMSPrototype1.Filters
             // Validate each action parameter using FluentValidation
             foreach (var parameter in context.ActionDescriptor.Parameters)
             {
+                // Skip if parameter doesn't exist in action arguments
+                if (!context.ActionArguments.ContainsKey(parameter.Name))
+                    continue;
+
                 var argument = context.ActionArguments[parameter.Name];
                 if (argument == null) continue;
 

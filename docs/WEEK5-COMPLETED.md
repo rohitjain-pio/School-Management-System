@@ -18,9 +18,9 @@ Week 5 focused on improving code quality, maintainability, and architecture thro
 Split AuthController into 4 focused controllers:
 
 1. **AuthenticationController.cs** (236 lines)
-   - Endpoint: `GET /api/Authentication/me`
-   - Endpoint: `POST /api/Authentication/login`
-   - Endpoint: `POST /api/Authentication/logout`
+   - Endpoint: `GET /api/Auth/me`
+   - Endpoint: `POST /api/Auth/login`
+   - Endpoint: `POST /api/Auth/logout`
    - Responsibilities: User authentication, session management
 
 2. **RegistrationController.cs** (65 lines)
@@ -339,10 +339,10 @@ npm run build
 ## Testing Performed
 
 ### Manual Testing
-- ✅ Login with new `/api/Authentication/login` endpoint
-- ✅ Registration via `/api/Registration/register`
-- ✅ Token refresh via `/api/Token/refresh`
-- ✅ Password reset via `/api/Password/request-reset` and `/api/Password/reset`
+- ✅ Login with new `/api/Auth/login` endpoint
+- ✅ Registration via `/api/Auth/register`
+- ✅ Token refresh via `/api/Auth/refresh`
+- ✅ Password reset via `/api/Auth/reset-password` and `/api/Password/reset`
 - ✅ ChatHub join/leave room functionality
 - ✅ Message sending with encryption
 - ✅ CORS configuration with development origins

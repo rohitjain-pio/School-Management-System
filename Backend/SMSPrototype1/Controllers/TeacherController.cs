@@ -54,7 +54,7 @@ namespace SMSPrototype1.Controllers
                 }
 
 
-                if (user.SchoolId == null)
+                if (user.SchoolId == Guid.Empty)
                 {
                     return SetError(apiResult, "User does not have a SchoolId assigned.", HttpStatusCode.BadRequest);
                 }
@@ -110,10 +110,8 @@ namespace SMSPrototype1.Controllers
             if (schoolIdClaim == null || !Guid.TryParse(schoolIdClaim.Value, out var schoolId))
             {
                 apiResult.IsSuccess = false;
-                apiResult.StatusCode = HttpStatusCode.Unauthorized;
-                apiResult.ErrorMessage = string.Join(" | ", ModelState.Values
-                    .SelectMany(x => x.Errors)
-                    .Select(e => e.ErrorMessage));
+                apiResult.StatusCode = HttpStatusCode.BadRequest;
+                apiResult.ErrorMessage = "School ID is required. Please ensure your account is assigned to a school.";
                 return apiResult;
             }
 
